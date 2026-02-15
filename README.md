@@ -1,73 +1,47 @@
-# React + TypeScript + Vite
+<div align="center">
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# NUEXA Dashboard
 
-Currently, two official plugins are available:
+<img src="public/favicon.png" width="200" alt="NUEXA Dashboard Icon" />
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+A modern financial analytics dashboard built with React and TypeScript
 
-## React Compiler
+</div>
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+- Frontend: React 19, TypeScript 5.9
+- Build Tool: Vite 7.3
+- Linting: ESLint 9 with React Hooks and Refresh plugins
+- Styling: CSS with custom design tokens and glass-morphism UI
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Project Structure
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── components/       # Reusable UI components (Icon, Sidebar, TopBar)
+├── pages/            # Page-level components (Dashboard, Revenue, Transactions, History, Profits)
+├── data/             # Mock data for charts and KPIs
+├── App.tsx           # Root component with routing
+├── main.tsx          # Application entry point
+├── types.ts          # TypeScript type definitions
+└── index.css         # Global styles and CSS variables
+public/
+├── favicon.png       # Application favicon
+└── vite.svg          # Vite logo
+dist/                 # Production build output
+screenshots/          # Project screenshots
+package.json          # Dependencies and scripts
+README.md             # This file
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Screenshots
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+<h2 align="center">Screenshots</h2>
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+<p align="center">
+  <img src="screenshots/1.png" alt="Dashboard Overview" width="420" />
+  <img src="screenshots/2.png" alt="Revenue Analytics" width="420" />
+  <img src="screenshots/3.png" alt="Transaction Monitor" width="420" />
+</p>
