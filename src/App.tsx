@@ -32,11 +32,13 @@ export default function App() {
           <TopBar active={active} />
 
           <div className="appContent">
-            {active === 'dashboard' && <DashboardPage />}
-            {active === 'revenue' && <RevenuePage />}
-            {active === 'history' && <HistoryPage />}
-            {active === 'profits' && <ProfitsPage />}
-            {active === 'transactions' && <TransactionsPage />}
+            <div className="appContentInner">
+              {active === 'dashboard' && <DashboardPage />}
+              {active === 'revenue' && <RevenuePage />}
+              {active === 'history' && <HistoryPage />}
+              {active === 'profits' && <ProfitsPage />}
+              {active === 'transactions' && <TransactionsPage />}
+            </div>
           </div>
         </main>
       </div>

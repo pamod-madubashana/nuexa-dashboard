@@ -117,6 +117,14 @@ When adding tests, also add `test` / `test:run` scripts to `package.json` and do
 - Lookups: prefer maps (`Record<...>`) for labels/icons over `if` chains.
 - UI consistency: reuse existing classes (`card`, `muted`, `h2`, etc.) before inventing new ones.
 - Accessibility baseline: buttons must be focusable, have a `type`, and icon-only controls need an accessible name.
+- Charts/tooltips: support hover + keyboard focus; tooltips should use `pointerEvents: 'none'` and avoid blocking interaction.
+
+## Adding A New Page
+
+- Add a new `NavItemId` literal in `src/types.ts`.
+- Add the nav item + render branch in `src/App.tsx`.
+- Add an icon mapping in `src/components/Sidebar.tsx` (`iconById`).
+- Add a title mapping in `src/components/TopBar.tsx` (`titleById`).
 
 ## Styling (CSS)
 
@@ -124,8 +132,7 @@ When adding tests, also add `test` / `test:run` scripts to `package.json` and do
 - Class naming is simple BEM-ish modifiers (`navItem--active`, `delta--pos`).
 - Prefer existing tokens/gradients; avoid introducing a framework.
 - Inline styles are acceptable for small dynamic values (keep them minimal and obvious).
-- Responsive: there is an existing breakpoint at `@media (max-width: 980px)`; extend it rather than adding many new breakpoints.
-- Status colors: use existing tokens (`--good`, `--bad`, `--warn`) and existing status/chip patterns.
+- Responsive: use the existing `@media (max-width: 980px)` breakpoint; status colors use `--good`/`--bad`/`--warn`.
 
 ## Cursor / Copilot Rules
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { dailyVolumes, donutBreakdown, kpis, netProfitSeries, recentTransactions, topSpender } from '../data/mock'
 
 function fmtMoney(n: number) {
@@ -12,13 +13,38 @@ function avatarBg(seed: string) {
   return `linear-gradient(140deg, hsla(${a}, 75%, 65%, 0.95), hsla(${b}, 75%, 55%, 0.95))`
 }
 
-function LineChart({ values }: { values: readonly number[] }) {
+type HoverPoint = {
+  index: number
+  x: number
+}
+
+function LineChart({
+  values,
+  onHover,
+  onLeave,
+}: {
+  values: readonly number[]
+  onHover?: (p: HoverPoint) => void
+  onLeave?: () => void
+}) {
   const w = 520
   const h = 200
   const pad = 22
   const min = Math.min(...values)
   const max = Math.max(...values)
   const span = Math.max(1, max - min)
+
+  function idxFromClientX(clientX: number, bounds: DOMRect) {
+    const t = (clientX - bounds.left) / Math.max(1, bounds.width)
+    const clamped = Math.max(0, Math.min(1, t))
+    const last = Math.max(1, values.length - 1)
+    return Math.round(clamped * last)
+  }
+
+  function xFromIndex(i: number) {
+    const last = Math.max(1, values.length - 1)
+    return pad + (i * (w - pad * 2)) / last
+  }
 
   const pts = values.map((v, i) => {
     const x = pad + (i * (w - pad * 2)) / Math.max(1, values.length - 1)
@@ -28,7 +54,25 @@ function LineChart({ values }: { values: readonly number[] }) {
   const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
 
   return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+    <svg
+      width="100%"
+      height="100%"
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      onPointerLeave={onLeave}
+      onPointerMove={(e) => {
+        if (!onHover) return
+        const bounds = e.currentTarget.getBoundingClientRect()
+        const idx = idxFromClientX(e.clientX, bounds)
+        onHover({ index: idx, x: xFromIndex(idx) })
+      }}
+      onPointerEnter={(e) => {
+        if (!onHover) return
+        const bounds = e.currentTarget.getBoundingClientRect()
+        const idx = idxFromClientX(e.clientX, bounds)
+        onHover({ index: idx, x: xFromIndex(idx) })
+      }}
+    >
       <defs>
         <linearGradient id="lp" x1="0" x2="1" y1="0" y2="0">
           <stop offset="0" stopColor="rgba(255,255,255,0.15)" />
@@ -53,11 +97,52 @@ function LineChart({ values }: { values: readonly number[] }) {
 
       <path d={`${d} L ${w - pad} ${h - pad} L ${pad} ${h - pad} Z`} fill="url(#la)" />
       <path d={d} fill="none" stroke="url(#lp)" strokeWidth="2.2" />
+
+      <rect
+        x={pad}
+        y={pad}
+        width={w - pad * 2}
+        height={h - pad * 2}
+        fill="transparent"
+        pointerEvents="all"
+      />
+
       {pts.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={4.2} fill="rgba(255,255,255,0.25)" />
+        <circle
+          key={i}
+          cx={p.x}
+          cy={p.y}
+          r={4.2}
+          fill="rgba(255,255,255,0.25)"
+          role={onHover ? 'button' : undefined}
+          tabIndex={onHover ? 0 : undefined}
+          aria-label={onHover ? `Point ${i + 1}` : undefined}
+          onPointerEnter={
+            onHover
+              ? () => {
+                  onHover({ index: i, x: p.x })
+                }
+              : undefined
+          }
+          onPointerMove={
+            onHover
+              ? () => {
+                  onHover({ index: i, x: p.x })
+                }
+              : undefined
+          }
+          onFocus={
+            onHover
+              ? () => {
+                  onHover({ index: i, x: p.x })
+                }
+              : undefined
+          }
+          onBlur={onLeave}
+        />
       ))}
       {pts.map((p, i) => (
-        <circle key={i + 'b'} cx={p.x} cy={p.y} r={2.2} fill="rgba(255,255,255,0.8)" />
+        <circle key={i + 'b'} cx={p.x} cy={p.y} r={2.2} fill="rgba(255,255,255,0.8)" pointerEvents="none" />
       ))}
     </svg>
   )
@@ -98,6 +183,10 @@ function describeDonutSlice(
 }
 
 function RevenueDonut({ data }: { data: ReadonlyArray<{ label: string; value: number }> }) {
+  const [activeLabel, setActiveLabel] = useState<string | null>(null)
+  const [activeAmount, setActiveAmount] = useState(0)
+  const [tipX, setTipX] = useState(0)
+
   type Seg = {
     key: string
     d: string
@@ -105,6 +194,9 @@ function RevenueDonut({ data }: { data: ReadonlyArray<{ label: string; value: nu
     dx: number
     dy: number
     isLift: boolean
+    x: number
+    label: string
+    amount: number
   }
 
   const size = 190
@@ -134,74 +226,157 @@ function RevenueDonut({ data }: { data: ReadonlyArray<{ label: string; value: nu
       const dx = 0
       const dy = 0
 
-      return {
-        key: d.label + i,
-        d: describeDonutSlice(cx, cy, outerR, innerR, a0, a1),
-        color: fills[i % fills.length],
-        dx,
-        dy,
-        isLift,
-      }
-    })
+       const mid = (a0 + a1) / 2
+       const p = polarToCartesian(cx, cy, outerR, mid)
+       return {
+         key: d.label + i,
+         d: describeDonutSlice(cx, cy, outerR, innerR, a0, a1),
+         color: fills[i % fills.length],
+         dx,
+         dy,
+         isLift,
+         x: p.x,
+         label: d.label,
+         amount: kpis.totalRevenue.value * d.value,
+       }
+     })
 
   const segs = maybeSegs.filter((s): s is Seg => s !== null)
 
+  function fmtMoney(n: number) {
+    return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  }
+
   return (
-    <svg
-      className="revDonutSvg"
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      role="img"
-      aria-label="Revenue breakdown"
-    >
-      <defs>
-        <filter id="revDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="16" stdDeviation="16" floodColor="rgba(0,0,0,0.65)" />
-        </filter>
-        <linearGradient id="revDonutHi" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="rgba(255,255,255,0.10)" />
-          <stop offset="0.55" stopColor="rgba(255,255,255,0.04)" />
-          <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
-        </linearGradient>
-        <radialGradient id="revHole" cx="0.30" cy="0.25" r="0.95">
-          <stop offset="0" stopColor="rgba(255,255,255,0.05)" />
-          <stop offset="0.62" stopColor="rgba(0,0,0,0.42)" />
-          <stop offset="1" stopColor="rgba(0,0,0,0.70)" />
-        </radialGradient>
-        <radialGradient id="revInnerGlow" cx="0.28" cy="0.22" r="0.95">
-          <stop offset="0" stopColor="rgba(255,255,255,0.06)" />
-          <stop offset="0.55" stopColor="rgba(255,255,255,0.02)" />
-          <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
-        </radialGradient>
-      </defs>
+    <div style={{ position: 'relative', width: size, height: size }} onPointerLeave={() => setActiveLabel(null)}>
+      {activeLabel !== null ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: tipX,
+            top: 10,
+            transform: 'translateX(-50%)',
+            width: 170,
+            borderRadius: 12,
+            padding: '8px 10px',
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(6px)',
+            color: 'var(--text2)',
+            fontSize: 10,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span>Category</span>
+            <span>{activeLabel}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+            <span>Revenue</span>
+            <span>{fmtMoney(activeAmount)}</span>
+          </div>
+        </div>
+      ) : null}
 
-      <g filter="url(#revDonutShadow)">
-        {segs.map((s) => (
-          <g key={s.key}>
-            <path
-              d={s.d}
-              fill={s.color}
-              opacity={0.92}
-            />
-            <path
-              d={s.d}
-              fill="url(#revDonutHi)"
-              opacity={0.65}
-              pointerEvents="none"
-            />
-          </g>
-        ))}
-      </g>
+      <svg
+        className="revDonutSvg"
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label="Revenue breakdown"
+      >
+        <defs>
+          <filter id="revDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="16" stdDeviation="16" floodColor="rgba(0,0,0,0.65)" />
+          </filter>
+          <linearGradient id="revDonutHi" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="rgba(255,255,255,0.10)" />
+            <stop offset="0.55" stopColor="rgba(255,255,255,0.04)" />
+            <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
+          </linearGradient>
+          <radialGradient id="revHole" cx="0.30" cy="0.25" r="0.95">
+            <stop offset="0" stopColor="rgba(255,255,255,0.05)" />
+            <stop offset="0.62" stopColor="rgba(0,0,0,0.42)" />
+            <stop offset="1" stopColor="rgba(0,0,0,0.70)" />
+          </radialGradient>
+          <radialGradient id="revInnerGlow" cx="0.28" cy="0.22" r="0.95">
+            <stop offset="0" stopColor="rgba(255,255,255,0.06)" />
+            <stop offset="0.55" stopColor="rgba(255,255,255,0.02)" />
+            <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
+          </radialGradient>
+        </defs>
 
-      <circle cx={cx} cy={cy} r={innerR - 2} fill="transparent" />
-      <circle cx={cx} cy={cy} r={innerR - 2} fill="url(#revInnerGlow)" opacity={0.55} />
-    </svg>
+        <g filter="url(#revDonutShadow)">
+          {segs.map((s) => (
+            <g key={s.key}>
+              <path
+                d={s.d}
+                fill={s.color}
+                opacity={0.92}
+                role="button"
+                tabIndex={0}
+                aria-label={`${s.label}. Revenue ${fmtMoney(s.amount)}`}
+                onPointerEnter={() => {
+                  setActiveLabel(s.label)
+                  setActiveAmount(s.amount)
+                  setTipX(s.x)
+                }}
+                onPointerMove={() => {
+                  setActiveLabel(s.label)
+                  setActiveAmount(s.amount)
+                  setTipX(s.x)
+                }}
+                onFocus={() => {
+                  setActiveLabel(s.label)
+                  setActiveAmount(s.amount)
+                  setTipX(s.x)
+                }}
+                onBlur={() => setActiveLabel(null)}
+              />
+              <path d={s.d} fill="url(#revDonutHi)" opacity={0.65} pointerEvents="none" />
+            </g>
+          ))}
+        </g>
+
+        <circle cx={cx} cy={cy} r={innerR - 2} fill="transparent" />
+        <circle cx={cx} cy={cy} r={innerR - 2} fill="url(#revInnerGlow)" opacity={0.55} />
+      </svg>
+    </div>
   )
 }
 
 function BarChart({ values }: { values: readonly number[] }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const [tipX, setTipX] = useState(0)
   const max = Math.max(...values)
+
+  const baseDate = new Date(2007, 10, 9)
+
+  function fmtMoney(n: number) {
+    return n.toLocaleString(undefined, {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    })
+  }
+
+  function dateLabel(i: number) {
+    const d = new Date(baseDate)
+    d.setDate(baseDate.getDate() + i)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const yyyy = String(d.getFullYear())
+    return `${mm}/${dd}/${yyyy}`
+  }
+
+  function showTip(i: number, el: HTMLElement) {
+    setActiveIndex(i)
+    setTipX(el.offsetLeft + el.offsetWidth / 2)
+  }
+
   return (
     <div style={{ height: 240, position: 'relative' }}>
       <div
@@ -214,7 +389,7 @@ function BarChart({ values }: { values: readonly number[] }) {
           padding: '14px 14px 16px',
         }}
         aria-hidden
-      >
+        >
         {values.map((v, i) => {
           const h = (v / max) * 190
           return (
@@ -229,43 +404,73 @@ function BarChart({ values }: { values: readonly number[] }) {
                 boxShadow:
                   'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 30px rgba(0,0,0,0.30)',
               }}
+              role="img"
+              tabIndex={0}
+              aria-label={`Date ${dateLabel(i)}. Transactions ${fmtMoney(v)}`}
               title={`Day ${i + 1}: ${v}`}
+              onPointerEnter={(e) => showTip(i, e.currentTarget)}
+              onPointerMove={(e) => showTip(i, e.currentTarget)}
+              onPointerLeave={() => setActiveIndex(null)}
+              onFocus={(e) => showTip(i, e.currentTarget)}
+              onBlur={() => setActiveIndex(null)}
             />
           )
         })}
       </div>
 
-      <div
-        style={{
-          position: 'absolute',
-          left: '52%',
-          top: 18,
-          transform: 'translateX(-50%)',
-          width: 150,
-          borderRadius: 12,
-          padding: '8px 10px',
-          background: 'rgba(0,0,0,0.35)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(6px)',
-          color: 'var(--text2)',
-          fontSize: 10,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-          <span>Date</span>
-          <span>11/09/2007</span>
+      {activeIndex !== null ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: tipX,
+            top: 18,
+            transform: 'translateX(-50%)',
+            width: 170,
+            borderRadius: 12,
+            padding: '8px 10px',
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(6px)',
+            color: 'var(--text2)',
+            fontSize: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span>Date</span>
+            <span>{dateLabel(activeIndex)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+            <span>Transactions</span>
+            <span>{fmtMoney(values[activeIndex] ?? 0)}</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
-          <span>Transactions</span>
-          <span>$125</span>
-        </div>
-      </div>
+      ) : null}
     </div>
   )
 }
 
 export function DashboardPage() {
+  const [activeProfit, setActiveProfit] = useState<HoverPoint | null>(null)
+
+  const baseDate = new Date(2007, 10, 9)
+  const profitW = 520
+
+  function dateLabel(i: number) {
+    const d = new Date(baseDate)
+    d.setDate(baseDate.getDate() + i)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const yyyy = String(d.getFullYear())
+    return `${mm}/${dd}/${yyyy}`
+  }
+
+  const profitTipLeft = activeProfit ? `${(activeProfit.x / profitW) * 100}%` : '50%'
+  const profitTipValue = activeProfit
+    ? fmtMoney((netProfitSeries[activeProfit.index] ?? 0) * 1000)
+    : fmtMoney(0)
+
   return (
     <div>
       <div className="kpiRow">
@@ -353,7 +558,38 @@ export function DashboardPage() {
           </div>
 
           <div className="chartWrap netProfitWrap" style={{ marginTop: 18, height: 240 }}>
-            <LineChart values={netProfitSeries} />
+            {activeProfit !== null ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: profitTipLeft,
+                  top: 18,
+                  transform: 'translateX(-50%)',
+                  width: 170,
+                  borderRadius: 12,
+                  padding: '8px 10px',
+                  background: 'rgba(0,0,0,0.35)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+                  backdropFilter: 'blur(6px)',
+                  color: 'var(--text2)',
+                  fontSize: 10,
+                  pointerEvents: 'none',
+                  zIndex: 2,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <span>Date</span>
+                  <span>{dateLabel(activeProfit.index)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+                  <span>Net Profit</span>
+                  <span>{profitTipValue}</span>
+                </div>
+              </div>
+            ) : null}
+
+            <LineChart values={netProfitSeries} onHover={setActiveProfit} onLeave={() => setActiveProfit(null)} />
             <div className="chartCaption">Charting X</div>
           </div>
         </section>

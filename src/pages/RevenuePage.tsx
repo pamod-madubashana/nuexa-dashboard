@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { dailyVolumes, donutBreakdown, kpis } from '../data/mock'
 
 function fmtMoney(n: number) {
@@ -39,6 +40,10 @@ function describeDonutSlice(
 }
 
 function RevenueDonut({ size = 190 }: { size?: number }) {
+  const [activeLabel, setActiveLabel] = useState<string | null>(null)
+  const [activeAmount, setActiveAmount] = useState(0)
+  const [tipX, setTipX] = useState(0)
+
   const cx = size / 2
   const cy = size / 2
   const outerR = 86
@@ -52,8 +57,11 @@ function RevenueDonut({ size = 190 }: { size?: number }) {
 
   type Seg = {
     key: string
+    label: string
     path: string
     fill: string
+    x: number
+    amount: number
   }
 
   const maybeSegs: Array<Seg | null> = donutBreakdown
@@ -64,50 +72,131 @@ function RevenueDonut({ size = 190 }: { size?: number }) {
       const a0 = start + gapDeg / 2
       const a1 = end - gapDeg / 2
       if (a1 <= a0) return null
+
+      const mid = (a0 + a1) / 2
+      const p = polarToCartesian(cx, cy, outerR, mid)
       return {
         key: d.label,
+        label: d.label,
         path: describeDonutSlice(cx, cy, outerR, innerR, a0, a1),
         fill: fills[i % fills.length],
+        x: p.x,
+        amount: kpis.totalRevenue.value * d.value,
       }
     })
 
   const segs = maybeSegs.filter((s): s is Seg => s !== null)
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="revDonutSvg" role="img">
-      <defs>
-        <filter id="revPageDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="16" stdDeviation="16" floodColor="rgba(0,0,0,0.65)" />
-        </filter>
-        <linearGradient id="revPageDonutHi" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="rgba(255,255,255,0.10)" />
-          <stop offset="0.55" stopColor="rgba(255,255,255,0.04)" />
-          <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
-        </linearGradient>
-        <radialGradient id="revPageHole" cx="0.28" cy="0.22" r="0.95">
-          <stop offset="0" stopColor="rgba(255,255,255,0.06)" />
-          <stop offset="0.55" stopColor="rgba(255,255,255,0.02)" />
-          <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
-        </radialGradient>
-      </defs>
+    <div style={{ position: 'relative', width: size, height: size }} onPointerLeave={() => setActiveLabel(null)}>
+      {activeLabel !== null ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: tipX,
+            top: 10,
+            transform: 'translateX(-50%)',
+            width: 170,
+            borderRadius: 12,
+            padding: '8px 10px',
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(6px)',
+            color: 'var(--text2)',
+            fontSize: 10,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span>Category</span>
+            <span>{activeLabel}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+            <span>Revenue</span>
+            <span>{fmtMoney(activeAmount)}</span>
+          </div>
+        </div>
+      ) : null}
 
-      <g filter="url(#revPageDonutShadow)">
-        {segs.map((s) => (
-          <g key={s.key}>
-            <path d={s.path} fill={s.fill} opacity={0.92} />
-            <path d={s.path} fill="url(#revPageDonutHi)" opacity={0.65} pointerEvents="none" />
-          </g>
-        ))}
-      </g>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="revDonutSvg" role="img">
+        <defs>
+          <filter id="revPageDonutShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="16" stdDeviation="16" floodColor="rgba(0,0,0,0.65)" />
+          </filter>
+          <linearGradient id="revPageDonutHi" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="rgba(255,255,255,0.10)" />
+            <stop offset="0.55" stopColor="rgba(255,255,255,0.04)" />
+            <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
+          </linearGradient>
+          <radialGradient id="revPageHole" cx="0.28" cy="0.22" r="0.95">
+            <stop offset="0" stopColor="rgba(255,255,255,0.06)" />
+            <stop offset="0.55" stopColor="rgba(255,255,255,0.02)" />
+            <stop offset="1" stopColor="rgba(255,255,255,0.00)" />
+          </radialGradient>
+        </defs>
 
-      <circle cx={cx} cy={cy} r={innerR - 2} fill="transparent" />
-      <circle cx={cx} cy={cy} r={innerR - 2} fill="url(#revPageHole)" opacity={0.55} />
-    </svg>
+        <g filter="url(#revPageDonutShadow)">
+          {segs.map((s) => (
+            <g key={s.key}>
+              <path
+                d={s.path}
+                fill={s.fill}
+                opacity={0.92}
+                role="button"
+                tabIndex={0}
+                aria-label={`${s.label}. Revenue ${fmtMoney(s.amount)}`}
+                onPointerEnter={() => {
+                  setActiveLabel(s.label)
+                  setActiveAmount(s.amount)
+                  setTipX(s.x)
+                }}
+                onPointerMove={() => {
+                  setActiveLabel(s.label)
+                  setActiveAmount(s.amount)
+                  setTipX(s.x)
+                }}
+                onFocus={() => {
+                  setActiveLabel(s.label)
+                  setActiveAmount(s.amount)
+                  setTipX(s.x)
+                }}
+                onBlur={() => setActiveLabel(null)}
+              />
+              <path d={s.path} fill="url(#revPageDonutHi)" opacity={0.65} pointerEvents="none" />
+            </g>
+          ))}
+        </g>
+
+        <circle cx={cx} cy={cy} r={innerR - 2} fill="transparent" />
+        <circle cx={cx} cy={cy} r={innerR - 2} fill="url(#revPageHole)" opacity={0.55} />
+      </svg>
+    </div>
   )
 }
 
 function BarChart({ values }: { values: readonly number[] }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const [tipX, setTipX] = useState(0)
   const max = Math.max(...values)
+
+  const baseDate = new Date(2007, 10, 9)
+
+  function dateLabel(i: number) {
+    const d = new Date(baseDate)
+    d.setDate(baseDate.getDate() + i)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const yyyy = String(d.getFullYear())
+    return `${mm}/${dd}/${yyyy}`
+  }
+
+  function showTip(i: number, el: HTMLElement) {
+    setActiveIndex(i)
+    setTipX(el.offsetLeft + el.offsetWidth / 2)
+  }
+
   return (
     <div style={{ height: 240, position: 'relative' }}>
       <div
@@ -134,10 +223,48 @@ function BarChart({ values }: { values: readonly number[] }) {
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 30px rgba(0,0,0,0.30)',
               }}
               title={`Day ${i + 1}: ${v}`}
+              role="img"
+              tabIndex={0}
+              aria-label={`Date ${dateLabel(i)}. Revenue ${fmtMoney(v)}`}
+              onPointerEnter={(e) => showTip(i, e.currentTarget)}
+              onPointerMove={(e) => showTip(i, e.currentTarget)}
+              onPointerLeave={() => setActiveIndex(null)}
+              onFocus={(e) => showTip(i, e.currentTarget)}
+              onBlur={() => setActiveIndex(null)}
             />
           )
         })}
       </div>
+
+      {activeIndex !== null ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: tipX,
+            top: 18,
+            transform: 'translateX(-50%)',
+            width: 170,
+            borderRadius: 12,
+            padding: '8px 10px',
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(6px)',
+            color: 'var(--text2)',
+            fontSize: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span>Date</span>
+            <span>{dateLabel(activeIndex)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+            <span>Revenue</span>
+            <span>{fmtMoney(values[activeIndex] ?? 0)}</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
